@@ -1,4 +1,4 @@
-name: CI-CD (Spring Boot + Docker)
+name: CI/CD (Spring Boot + Tests + Docker)
 
 on:
   push:
@@ -26,28 +26,43 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Build with Maven (skip tests)
-        run: mvn -DskipTests clean package
+      # Runs unit tests + builds jar
+      - name: Build + Test (Maven)
+        run: mvn -B clean verify
+
+      # Always upload test reports even if tests fail
+      - name: Upload test reports (Surefire/Failsafe)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/**
+            target/failsafe-reports/**
 
       - name: Upload JAR artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: employee-management-jar
           path: target/*.jar
 
       - name: Set up Docker Buildx
+        if: success()
         uses: docker/setup-buildx-action@v3
 
-      # Logs in to GHCR using the default GITHUB_TOKEN (no secrets required)
+      # Login to GHCR using built-in token (no secrets needed)
       - name: Login to GitHub Container Registry
+        if: success()
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Builds the image always; pushes only when pushing to main
+      # Build image for PRs (no push); build+push only on main push
       - name: Build (and push on main) Docker image
+        if: success()
         uses: docker/build-push-action@v6
         with:
           context: .
